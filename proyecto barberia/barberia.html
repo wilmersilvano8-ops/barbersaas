@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reserva tu Cita</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+<style>
+:root{
+  --gold:#C9A84C;--gold-light:#E8C97A;--dark:#0E0E0E;--dark2:#1A1A1A;
+  --dark3:#252525;--dark4:#2E2E2E;--text:#E8E0D0;--muted:#7A7268;
+  --green:#2ECC71;--red:#E74C3C;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{font-family:'DM Sans',sans-serif;background:var(--dark);color:var(--text);min-height:100vh;overflow-x:hidden;}
+
+/* ── LOADING ── */
+#screenLoading{
+  position:fixed;inset:0;background:var(--dark);z-index:999;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+}
+#screenLoading.oculto{display:none;}
+.spinner{width:40px;height:40px;border:3px solid var(--dark4);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{color:var(--muted);font-size:.87rem;}
+
+/* ── ERROR ── */
+#screenError{
+  display:none;position:fixed;inset:0;background:var(--dark);z-index:998;
+  align-items:center;justify-content:center;padding:24px;text-align:center;
+}
+#screenError.visible{display:flex;}
+.error-caja{
+  max-width:440px;background:var(--dark2);border:1px solid rgba(231,76,60,.3);
+  border-radius:16px;padding:32px;
+}
+.error-caja h2{font-family:'Playfair Display',serif;color:var(--gold-light);margin-bottom:12px;}
+.error-caja p{color:var(--muted);font-size:.85rem;line-height:1.7;}
+
+/* ── BLOQUEADO ── */
+#screenBloqueo{
+  display:none;position:fixed;inset:0;background:var(--dark);z-index:997;
+  align-items:center;justify-content:center;padding:24px;text-align:center;
+}
+#screenBloqueo.visible{display:flex;}
+.bloqueo-caja{max-width:420px;width:100%;}
+.bloqueo-ico{font-size:3.2rem;margin-bottom:12px;}
+.bloqueo-titulo{
+  font-family:'Playfair Display',serif;font-size:1.8rem;color:var(--gold-light);margin-bottom:8px;
+}
+.bloqueo-sub{color:var(--muted);font-size:.87rem;margin-bottom:22px;line-height:1.6;}
+.bloqueo-box{
+  background:var(--dark2);border:1px solid rgba(201,168,76,.2);
+  border-radius:14px;padding:22px;margin-bottom:12px;
+}
+
+/* ── BARRA SYNC ── */
+#barraSync{
+  padding:6px 20px;text-align:center;font-size:.72rem;
+  border-bottom:1px solid transparent;transition:all .3s;
+}
+#barraSync.online{background:rgba(46,204,113,.06);border-bottom-color:rgba(46,204,113,.12);color:#4aba7a;}
+#barraSync.offline{background:rgba(231,76,60,.06);border-bottom-color:rgba(231,76,60,.14);color:var(--red);}
+
+/* ── HEADER ── */
+header{
+  text-align:center;padding:36px 20px 24px;
+  border-bottom:1px solid rgba(201,168,76,.15);
+}
+.tijeras{
+  font-size:2rem;margin-bottom:10px;display:block;
+  animation:mover 7s ease-in-out infinite;
+}
+@keyframes mover{0%,90%,100%{transform:rotate(0)}45%{transform:rotate(18deg)}55%{transform:rotate(-18deg)}}
+header h1{
+  font-family:'Playfair Display',serif;
+  font-size:clamp(1.8rem,6vw,2.8rem);font-weight:900;
+  background:linear-gradient(135deg,var(--gold-light),var(--gold));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;line-height:1.1;
+}
+header p{color:var(--muted);font-size:.82rem;margin-top:6px;letter-spacing:2.5px;text-transform:uppercase;}
+.info-bar{
+  background:var(--dark2);border-bottom:1px solid rgba(201,168,76,.1);
+  padding:9px 20px;text-align:center;font-size:.77rem;color:var(--muted);
+}
+.info-bar span{color:var(--gold);}
+
+/* ── MAIN GRID ── */
+main{max-width:960px;margin:0 auto;padding:24px 18px 80px;display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+@media(max-width:680px){main{grid-template-columns:1fr;padding:14px 12px 60px;}}
+
+/* ── TARJETA ── */
+.tarjeta{background:var(--dark2);border:1px solid rgba(201,168,76,.12);border-radius:14px;padding:20px;}
+.tarjeta-titulo{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--gold-light);margin-bottom:14px;}
+
+/* ── SERVICIOS ── */
+.grid-srv{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;}
+.srv-btn{
+  background:var(--dark3);border:2px solid var(--dark4);border-radius:10px;
+  padding:12px 8px;cursor:pointer;text-align:center;transition:border-color .15s;
+  font-family:'DM Sans',sans-serif;
+}
+.srv-btn:hover{border-color:rgba(201,168,76,.5);}
+.srv-btn.sel{border-color:var(--gold);background:rgba(201,168,76,.1);}
+.srv-ico{font-size:1.4rem;margin-bottom:4px;}
+.srv-nom{font-size:.78rem;font-weight:600;color:var(--text);}
+.srv-pre{font-size:.73rem;color:var(--gold);margin-top:2px;}
+
+/* ── FORM ── */
+.campo{margin-bottom:12px;}
+.campo label{
+  display:block;font-size:.7rem;letter-spacing:2px;
+  text-transform:uppercase;color:var(--muted);margin-bottom:4px;
+}
+.campo input{
+  width:100%;padding:10px 12px;background:var(--dark3);
+  border:1px solid var(--dark4);border-radius:8px;color:var(--text);
+  font-family:'DM Sans',sans-serif;font-size:.9rem;
+}
+.campo input:focus{outline:none;border-color:var(--gold);}
+
+/* ── HORAS ── */
+.grid-horas{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:12px;}
+.hora-btn{
+  background:var(--dark3);border:1px solid var(--dark4);border-radius:7px;
+  padding:8px 2px;color:var(--muted);font-family:'DM Sans',sans-serif;
+  font-size:.72rem;cursor:pointer;transition:border-color .15s;
+}
+.hora-btn:hover:not([disabled]){border-color:var(--gold);color:var(--text);}
+.hora-btn.sel{background:var(--gold);border-color:var(--gold);color:var(--dark);font-weight:700;}
+.hora-btn.ocupada{opacity:.25;cursor:not-allowed;text-decoration:line-through;}
+.hora-btn.pasada{opacity:.25;cursor:not-allowed;font-style:italic;}
+
+/* ── PRECIO BADGE ── */
+#badgePrecio{
+  display:none;background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);
+  border-radius:8px;padding:9px 12px;margin-bottom:12px;color:var(--gold-light);font-size:.85rem;
+}
+
+/* ── BTN DORADO ── */
+.btn-dorado{
+  width:100%;padding:13px;background:linear-gradient(135deg,var(--gold),var(--gold-light));
+  border:none;border-radius:9px;color:var(--dark);font-family:'DM Sans',sans-serif;
+  font-size:.95rem;font-weight:600;cursor:pointer;transition:opacity .15s;margin-top:4px;
+}
+.btn-dorado:hover{opacity:.88;}
+.btn-dorado:disabled{opacity:.4;cursor:wait;}
+
+/* ── AGENDA ── */
+.agenda-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;}
+.badge-cnt{
+  background:var(--gold);color:var(--dark);font-size:.67rem;font-weight:700;
+  border-radius:20px;padding:3px 11px;
+}
+.cita{
+  background:var(--dark3);border:1px solid var(--dark4);border-left:3px solid var(--gold);
+  border-radius:9px;padding:13px;margin-bottom:8px;animation:aparecer .25s ease;
+}
+@keyframes aparecer{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:translateY(0)}}
+.cita.vieja{border-left-color:var(--muted);opacity:.5;}
+.cita-nom{font-weight:600;font-size:.9rem;margin-bottom:4px;}
+.cita-det{font-size:.75rem;color:var(--muted);line-height:1.8;}
+.cita-det strong{color:var(--text);}
+.cita-acc{display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;}
+.badge-est{
+  font-size:.63rem;letter-spacing:1px;text-transform:uppercase;
+  padding:2px 8px;border-radius:20px;font-weight:700;
+}
+.be-p{background:rgba(201,168,76,.12);color:var(--gold);}
+.be-a{background:rgba(46,204,113,.12);color:var(--green);}
+.be-c{background:rgba(231,76,60,.12);color:var(--red);}
+.btn-mini{
+  padding:6px 10px;border-radius:7px;border:none;
+  font-family:'DM Sans',sans-serif;font-size:.71rem;cursor:pointer;
+}
+.bv{background:rgba(46,204,113,.1);color:var(--green);border:1px solid rgba(46,204,113,.22);}
+.br{background:rgba(231,76,60,.08);color:var(--red);border:1px solid rgba(231,76,60,.18);}
+.bo{background:rgba(201,168,76,.08);color:var(--gold);border:1px solid rgba(201,168,76,.2);}
+.vacio{text-align:center;padding:28px;color:var(--muted);font-size:.83rem;}
+
+/* ── MODAL ── */
+.modal-fondo{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.82);
+  z-index:800;align-items:center;justify-content:center;padding:16px;
+}
+.modal-fondo.visible{display:flex;}
+.modal{
+  background:var(--dark2);border:1px solid rgba(201,168,76,.28);
+  border-radius:14px;padding:24px;max-width:460px;width:100%;
+  position:relative;max-height:90vh;overflow-y:auto;
+}
+.modal-cerrar{position:absolute;top:12px;right:13px;background:none;border:none;color:var(--muted);font-size:1.2rem;cursor:pointer;}
+.modal-titulo{font-family:'Playfair Display',serif;font-size:1.1rem;color:var(--gold-light);margin-bottom:12px;}
+.caja-wa{
+  background:#0d2117;border:1px solid rgba(37,211,102,.2);border-radius:10px;
+  padding:13px;font-size:.79rem;line-height:1.9;color:#cee9d5;
+  white-space:pre-wrap;font-family:monospace;margin:10px 0;max-height:210px;overflow-y:auto;
+}
+.btn-copiar{
+  width:100%;padding:11px;background:linear-gradient(135deg,var(--gold),var(--gold-light));
+  border:none;border-radius:8px;color:var(--dark);font-family:'DM Sans',sans-serif;
+  font-size:.88rem;font-weight:600;cursor:pointer;margin-top:10px;
+}
+.btn-wa{
+  width:100%;padding:11px;background:rgba(37,211,102,.12);color:#25d366;
+  border:1px solid rgba(37,211,102,.28);border-radius:8px;
+  font-family:'DM Sans',sans-serif;font-size:.88rem;cursor:pointer;margin-top:8px;
+}
+
+/* ── TOAST ── */
+.toast{
+  position:fixed;bottom:22px;left:50%;
+  transform:translateX(-50%) translateY(80px);
+  background:var(--dark3);border:1px solid rgba(201,168,76,.28);
+  color:var(--text);padding:10px 22px;border-radius:30px;
+  font-size:.83rem;z-index:999;transition:transform .3s;white-space:nowrap;
+}
+.toast.visible{transform:translateX(-50%) translateY(0);}
+</style>
+</head>
+<body>
+
+<div id="screenLoading">
+  <div class="spinner"></div>
+  <div class="loading-txt">Cargando agenda en tiempo real...</div>
+</div>
+
+<div id="screenError">
+  <div class="error-caja">
+    <div style="font-size:2.5rem;margin-bottom:12px">⚠️</div>
+    <h2 id="errTitulo">Enlace no válido</h2>
+    <p id="errMsg">Este link no tiene el formato correcto. Pide al administrador que te envíe un link válido.</p>
+  </div>
+</div>
+
+<div id="screenBloqueo">
+  <div class="bloqueo-caja">
+    <div class="bloqueo-ico">🔒</div>
+    <div class="bloqueo-titulo" id="bloqueoNombre">Barbería</div>
+    <div class="bloqueo-sub">La suscripción de este barbero ha vencido.<br>Contacta al administrador para renovarla.</div>
+  </div>
+</div>
+
+<div id="barraSync" class="offline">🔴 Conectando...</div>
+
+<header>
+  <span class="tijeras">✂️</span>
+  <h1 id="hNegocio">Barbería</h1>
+  <p id="hSub">Reserva tu cita</p>
+</header>
+<div class="info-bar" id="infoBar" style="display:none"></div>
+
+<main>
+  <!-- COLUMNA IZQUIERDA -->
+  <div>
+    <div class="tarjeta" style="margin-bottom:18px">
+      <div class="tarjeta-titulo">💈 Elige tu servicio</div>
+      <div class="grid-srv" id="gridServicios">
+        <div class="vacio" style="grid-column:span 2">Cargando servicios...</div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <div class="tarjeta-titulo">📅 Tu cita</div>
+      <div class="campo">
+        <label>Nombre completo</label>
+        <input type="text" id="nombre" placeholder="Tu nombre completo">
+      </div>
+      <div class="campo">
+        <label>Celular WhatsApp</label>
+        <input type="tel" id="telefono" placeholder="3001234567">
+      </div>
+      <div class="campo">
+        <label>Fecha</label>
+        <input type="date" id="fecha">
+      </div>
+      <div class="campo">
+        <label>Hora disponible</label>
+        <div class="grid-horas" id="gridHoras">
+          <div style="grid-column:span 4;color:var(--muted);font-size:.78rem;text-align:center;padding:6px">
+            Selecciona una fecha primero
+          </div>
+        </div>
+      </div>
+      <div id="badgePrecio">💰 Total: <strong id="txtPrecio"></strong></div>
+      <button class="btn-dorado" id="btnReservar">Reservar cita →</button>
+    </div>
+  </div>
+
+  <!-- COLUMNA DERECHA -->
+  <div class="tarjeta">
+    <div class="agenda-top">
+      <div class="tarjeta-titulo" style="margin-bottom:0">📋 Agenda</div>
+      <span class="badge-cnt" id="badgeCitas">0 citas</span>
+    </div>
+    <div id="listaCitas"><div class="vacio">Selecciona una fecha para ver la agenda</div></div>
+  </div>
+</main>
+
+<!-- MODAL -->
+<div class="modal-fondo" id="modalFondo">
+  <div class="modal">
+    <button class="modal-cerrar" id="btnCerrarModal">✕</button>
+    <div class="modal-titulo" id="modalTitulo"></div>
+    <div id="modalContenido"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ╔══════════════════════════════════════════════════════╗
+// ║  CONFIGURACIÓN FIREBASE — MISMA QUE EN admin.html    ║
+// ╚══════════════════════════════════════════════════════╝
+var FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAs7g0kM1m36W45OpQrStUvWxYz123456",
+  authDomain:        "proyect-0410-jhoalac-2026.firebaseapp.com",
+  databaseURL:       "https://proyect-0410-jhoalac-2026-default-rtdb.firebaseio.com",
+  projectId:         "proyect-0410-jhoalac-2026",
+  storageBucket:     "proyect-0410-jhoalac-2026.appspot.com",
+  messagingSenderId: "987654321012",
+  appId:             "1:987654321012:web:abcdef123456"
+};
+// ╚══════════════════════════════════════════════════════╝
+
+// HORAS disponibles — edítalas a tu gusto
+var HORAS = ['8:00','9:00','10:00','11:00','2:00','3:00','4:00','5:00','6:00'];
+
+// ── PARÁMETROS URL ────────────────────────────────────────
+var P           = new URLSearchParams(window.location.search);
+var BARBER_ID   = P.get('b') || '';
+var db          = null;
+var barberoData = null;
+var srvSel      = null;   // {nombre, precio}
+var horaSel     = null;
+var citasFecha  = {};     // citas cargadas para la fecha seleccionada
+var msgModal    = '';
+var telModal    = '';
+
+// ── VALIDACIÓN ────────────────────────────────────────────
+if (!BARBER_ID) {
+  ocultarCarga();
+  mostrarError('Enlace no válido', 'Este link no contiene un ID de barbero. Pide al administrador que genere uno correcto.');
+} else {
+  iniciarFirebase();
+}
+
+function ocultarCarga() {
+  document.getElementById('screenLoading').classList.add('oculto');
+}
+function mostrarError(titulo, msg) {
+  ocultarCarga();
+  document.getElementById('errTitulo').textContent = titulo;
+  document.getElementById('errMsg').textContent = msg;
+  document.getElementById('screenError').classList.add('visible');
+}
+
+// ── FIREBASE ─────────────────────────────────────────────
+function iniciarFirebase() {
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.database();
+
+    // Estado conexión
+    db.ref('.info/connected').on('value', function(s) {
+      var ok = s.val() === true;
+      var b = document.getElementById('barraSync');
+      b.textContent = ok ? '🟢 Datos en tiempo real' : '🔴 Sin conexión — reconectando...';
+      b.className = ok ? 'online' : 'offline';
+    });
+
+    // Cargar datos del barbero UNA VEZ (no en tiempo real para evitar reinicios)
+    db.ref('barberos/' + BARBER_ID).once('value', function(snap) {
+      var b = snap.val();
+      if (!b) { mostrarError('Barbero no encontrado', 'Este link ya no está activo. Contacta al administrador.'); return; }
+
+      // Verificar suscripción
+      var ahora = Date.now();
+      var exp   = b.expiracion ? new Date(b.expiracion).getTime() : (ahora + 86400000);
+      if (ahora > exp) {
+        ocultarCarga();
+        document.getElementById('bloqueoNombre').textContent = b.negocio || 'Barbería';
+        document.getElementById('screenBloqueo').classList.add('visible');
+        return;
+      }
+
+      barberoData = b;
+      ocultarCarga();
+      renderPagina(b);
+
+    }, function(err) {
+      mostrarError('Error de conexión', 'No se pudo cargar la información. Verifica tu conexión.');
+    });
+
+  } catch(e) {
+    mostrarError('Error Firebase', 'No se pudo inicializar Firebase: ' + e.message);
+  }
+}
+
+// Fallback: desbloquear loader si Firebase no responde en 5 segundos
+setTimeout(function() {
+  if (!document.getElementById('screenLoading').classList.contains('oculto')) {
+    mostrarError('Tiempo agotado', 'No se pudo conectar. Verifica tu conexión a internet.');
+  }
+}, 5000);
+
+// ── RENDER PÁGINA ─────────────────────────────────────────
+function renderPagina(b) {
+  document.getElementById('hNegocio').textContent = b.negocio || 'Barbería';
+  document.getElementById('hSub').textContent = (b.nombre || '') + (b.ciudad ? ' · ' + b.ciudad : '') || 'Reserva tu cita';
+  document.title = (b.negocio || 'Barbería') + ' — Reserva';
+
+  var infoBar = document.getElementById('infoBar');
+  var infoTxt = '💈 <span>' + esc(b.negocio || '') + '</span>';
+  if (b.ciudad) infoTxt += ' | 📍 <span>' + esc(b.ciudad) + '</span>';
+  infoBar.innerHTML = infoTxt;
+  infoBar.style.display = 'block';
+
+  document.getElementById('fecha').min = new Date().toISOString().split('T')[0];
+  renderServicios(b.servicios);
+}
+
+// ── RENDER SERVICIOS ──────────────────────────────────────
+function renderServicios(serviciosObj) {
+  var g = document.getElementById('gridServicios');
+  g.innerHTML = '';
+
+  // serviciosObj puede ser un objeto {s0:{nombre,precio}, s1:...} o null
+  var lista = [];
+  if (serviciosObj && typeof serviciosObj === 'object') {
+    Object.keys(serviciosObj).forEach(function(k) {
+      var s = serviciosObj[k];
+      if (s && s.nombre) lista.push(s);
+    });
+  }
+
+  // Servicios por defecto si no hay ninguno
+  if (!lista.length) {
+    lista = [
+      {nombre:'Corte Clásico',  precio:'15000'},
+      {nombre:'Corte + Barba',  precio:'25000'},
+      {nombre:'Afeitado Navaja',precio:'20000'},
+      {nombre:'Corte Niño',     precio:'12000'}
+    ];
+  }
+
+  lista.forEach(function(s) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'srv-btn' + (srvSel && srvSel.nombre === s.nombre ? ' sel' : '');
+    btn.innerHTML =
+      '<div class="srv-ico">💈</div>' +
+      '<div class="srv-nom">' + esc(s.nombre) + '</div>' +
+      '<div class="srv-pre">$' + Number(s.precio || 0).toLocaleString('es-CO') + '</div>';
+    btn.addEventListener('click', function() {
+      srvSel = s;
+      document.querySelectorAll('.srv-btn').forEach(function(b) { b.classList.remove('sel'); });
+      btn.classList.add('sel');
+      document.getElementById('txtPrecio').textContent = '$' + Number(s.precio || 0).toLocaleString('es-CO');
+      document.getElementById('badgePrecio').style.display = 'block';
+    });
+    g.appendChild(btn);
+  });
+}
+
+// ── HORAS ─────────────────────────────────────────────────
+function ahora()  { var d=new Date(); return d.getHours()*60+d.getMinutes(); }
+function hAMin(h) { var p=h.split(':'),hh=parseInt(p[0]); if(hh>=2&&hh<=7)hh+=12; return hh*60+(parseInt(p[1])||0); }
+function esPasada(fecha, hora) {
+  var hoy = new Date().toISOString().split('T')[0];
+  if (fecha < hoy) return true;
+  if (fecha === hoy) return hAMin(hora) <= ahora();
+  return false;
+}
+
+function renderHoras(fecha) {
+  var g = document.getElementById('gridHoras');
+  if (!fecha) {
+    g.innerHTML = '<div style="grid-column:span 4;color:var(--muted);font-size:.78rem;text-align:center;padding:6px">Selecciona una fecha primero</div>';
+    return;
+  }
+
+  // Horas ocupadas en esa fecha (ya cargadas en citasFecha)
+  var ocupadas = [];
+  Object.values(citasFecha).forEach(function(c) {
+    if (c.hora) ocupadas.push(c.hora);
+  });
+
+  g.innerHTML = '';
+  HORAS.forEach(function(h) {
+    var pasada  = esPasada(fecha, h);
+    var ocupada = ocupadas.indexOf(h) >= 0;
+    var btn = document.createElement('button');
+    btn.type = 'button'; btn.textContent = h;
+    var cls = 'hora-btn';
+    if (ocupada) cls += ' ocupada';
+    else if (pasada) cls += ' pasada';
+    if (horaSel === h) cls += ' sel';
+    btn.className = cls;
+    if (ocupada || pasada) btn.disabled = true;
+    btn.addEventListener('click', function() {
+      if (btn.disabled) return;
+      horaSel = h;
+      renderHoras(fecha);
+    });
+    g.appendChild(btn);
+  });
+}
+
+// ── RENDER CITAS DEL DÍA ─────────────────────────────────
+function renderCitas(fecha) {
+  var lista = document.getElementById('listaCitas');
+  var arr   = Object.entries(citasFecha).map(function(e) {
+    return Object.assign({ _id: e[0] }, e[1]);
+  });
+
+  // Total activas
+  var act = arr.filter(function(c) { return c.estado !== 'cancelada'; });
+  document.getElementById('badgeCitas').textContent = act.length + (act.length === 1 ? ' cita' : ' citas');
+
+  if (!arr.length) {
+    lista.innerHTML = '<div class="vacio">Agenda libre para este día 🎉</div>';
+    return;
+  }
+
+  arr.sort(function(a, b) { return hAMin(a.hora||'0') - hAMin(b.hora||'0'); });
+
+  var html = '';
+  arr.forEach(function(c) {
+    var estadoBadge = c.estado === 'aceptada' ? 'be-a' : c.estado === 'cancelada' ? 'be-c' : 'be-p';
+    var estadoLabel = c.estado === 'aceptada' ? 'Confirmada' : c.estado === 'cancelada' ? 'Cancelada' : 'Pendiente';
+    html +=
+      '<div class="cita">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">' +
+          '<div class="cita-nom">' + esc(c.cliente || c.nombre || '—') + '</div>' +
+          '<span class="badge-est ' + estadoBadge + '">' + estadoLabel + '</span>' +
+        '</div>' +
+        '<div class="cita-det">' +
+          '💈 <strong>' + esc(c.servicio || '—') + '</strong> | ⏰ <strong>' + (c.hora||'—') + '</strong><br>' +
+          '📱 <strong>' + esc(c.telefono || '—') + '</strong>' +
+        '</div>' +
+        '<div class="cita-acc">' +
+          (c.estado === 'pendiente'
+            ? '<button class="btn-mini bv" data-acc="aceptar" data-id="'+c._id+'">✓ Aceptar</button>' : '') +
+          (c.estado !== 'cancelada'
+            ? '<button class="btn-mini br" data-acc="cancelar" data-id="'+c._id+'">✕ Cancelar</button>' : '') +
+          '<button class="btn-mini bo" data-acc="msg" data-id="'+c._id+'">💬 Mensaje</button>' +
+        '</div>' +
+      '</div>';
+  });
+  lista.innerHTML = html;
+}
+
+// ── CAMBIO DE FECHA ───────────────────────────────────────
+document.getElementById('fecha').addEventListener('change', function() {
+  var fecha = this.value;
+  if (!fecha || !db || !BARBER_ID) return;
+  horaSel = null;
+
+  // Escuchar citas de esa fecha en tiempo real
+  db.ref('citas/' + BARBER_ID + '/' + fecha).on('value', function(snap) {
+    citasFecha = snap.val() || {};
+    renderHoras(fecha);
+    renderCitas(fecha);
+  });
+});
+
+// ── RESERVAR ─────────────────────────────────────────────
+document.getElementById('btnReservar').addEventListener('click', function() {
+  var nom  = document.getElementById('nombre').value.trim();
+  var tel  = document.getElementById('telefono').value.trim();
+  var fec  = document.getElementById('fecha').value;
+
+  if (!nom)     return toast('⚠️ Escribe tu nombre');
+  if (!tel)     return toast('⚠️ Escribe tu celular');
+  if (!srvSel)  return toast('⚠️ Selecciona un servicio');
+  if (!fec)     return toast('⚠️ Selecciona una fecha');
+  if (!horaSel) return toast('⚠️ Selecciona una hora disponible');
+  if (!db || !BARBER_ID) return toast('⚠️ Sin conexión. Intenta de nuevo');
+
+  // Verificar hora no ocupada al momento de reservar
+  var ocupada = Object.values(citasFecha).some(function(c) {
+    return c.hora === horaSel && c.estado !== 'cancelada';
+  });
+  if (ocupada) return toast('⚠️ Esa hora acaba de ser reservada. Elige otra.');
+
+  var btn = document.getElementById('btnReservar');
+  btn.disabled = true; btn.textContent = 'Guardando...';
+
+  var nueva = {
+    cliente:  nom,
+    nombre:   nom,
+    telefono: tel,
+    servicio: srvSel.nombre,
+    precio:   srvSel.precio,
+    hora:     horaSel,
+    estado:   'pendiente',
+    ts:       new Date().toISOString()
+  };
+
+  db.ref('citas/' + BARBER_ID + '/' + fec).push(nueva, function(err) {
+    btn.disabled = false; btn.textContent = 'Reservar cita →';
+    if (err) { toast('❌ Error al guardar: ' + err.message); return; }
+    toast('✅ ¡Cita reservada con éxito!');
+
+    // Notificar al barbero si tiene WhatsApp registrado
+    var telBarbero = barberoData ? barberoData.tel : '';
+    setTimeout(function() {
+      mostrarMensaje('confirmacion', nueva, fec, telBarbero);
+    }, 700);
+
+    // Limpiar formulario
+    srvSel  = null; horaSel = null;
+    document.getElementById('nombre').value   = '';
+    document.getElementById('telefono').value = '';
+    document.getElementById('badgePrecio').style.display = 'none';
+    document.querySelectorAll('.srv-btn').forEach(function(b) { b.classList.remove('sel'); });
+  });
+});
+
+// ── ACCIONES EN AGENDA ────────────────────────────────────
+document.getElementById('listaCitas').addEventListener('click', function(e) {
+  var btn = e.target.closest('[data-acc]');
+  if (!btn) return;
+  var acc  = btn.getAttribute('data-acc');
+  var id   = btn.getAttribute('data-id');
+  var c    = citasFecha[id];
+  var fec  = document.getElementById('fecha').value;
+
+  if (acc === 'aceptar') {
+    db.ref('citas/' + BARBER_ID + '/' + fec + '/' + id).update({ estado: 'aceptada' });
+    toast('✅ Cita aceptada');
+    setTimeout(function() { mostrarMensaje('aceptacion', c, fec, ''); }, 300);
+
+  } else if (acc === 'cancelar') {
+    db.ref('citas/' + BARBER_ID + '/' + fec + '/' + id).update({ estado: 'cancelada' });
+    toast('❌ Cita cancelada');
+    setTimeout(function() { mostrarMensaje('cancelacion', c, fec, ''); }, 300);
+
+  } else if (acc === 'msg') {
+    mostrarMensaje('recordatorio', c, fec, '');
+  }
+});
+
+// ── MENSAJES WHATSAPP ─────────────────────────────────────
+function genLink() {
+  return window.location.origin + window.location.pathname + '?b=' + BARBER_ID;
+}
+
+function mostrarMensaje(tipo, c, fec, telBarbero) {
+  var negocio  = barberoData ? (barberoData.negocio || 'Barbería') : 'Barbería';
+  var nombre   = c.cliente || c.nombre || '—';
+  var servicio = c.servicio || '—';
+  var precio   = c.precio ? ('$' + Number(c.precio).toLocaleString('es-CO')) : '';
+  var hora     = c.hora || '—';
+  var link     = genLink();
+  var titulo   = '';
+  var msg      = '';
+
+  if (tipo === 'confirmacion') {
+    titulo = '🎉 ¡Cita reservada!';
+    var msgCliente =
+      '✂️ *' + negocio + '*\n\n' +
+      '¡Hola ' + nombre + '! Tu cita fue reservada ✅\n\n' +
+      '💈 Servicio: ' + servicio + (precio ? '\n💰 Precio: ' + precio : '') + '\n' +
+      '📅 Fecha: ' + fmtFecha(fec) + '\n' +
+      '⏰ Hora: ' + hora + '\n\n' +
+      'El barbero confirmará tu cita pronto.\n' +
+      '🔗 Seguimiento: ' + link;
+
+    var msgBarbero = telBarbero
+      ? '🔔 *Nueva cita en ' + negocio + '*\n\n' +
+        '👤 ' + nombre + '\n📱 ' + (c.telefono||'—') + '\n' +
+        '💈 ' + servicio + (precio ? ' | 💰 ' + precio : '') + '\n' +
+        '📅 ' + fmtFecha(fec) + ' ⏰ ' + hora + '\n\n' +
+        'Gestiona tu agenda:\n' + link
+      : null;
+
+    msgModal = msgCliente; telModal = c.telefono || '';
+    document.getElementById('modalTitulo').textContent = titulo;
+    document.getElementById('modalContenido').innerHTML =
+      '<p style="font-size:.79rem;color:var(--muted);margin-bottom:6px">Mensaje para el cliente:</p>' +
+      '<div class="caja-wa">' + esc(msgCliente) + '</div>' +
+      '<button class="btn-copiar" id="btnCopMsgCliente">📋 Copiar mensaje del cliente</button>' +
+      (c.telefono ? '<button class="btn-wa" id="btnWACliente">💬 Enviar al cliente por WhatsApp</button>' : '') +
+      (msgBarbero
+        ? '<hr style="border-color:var(--dark4);margin:14px 0">' +
+          '<p style="font-size:.79rem;color:var(--muted);margin-bottom:6px">Notificación al barbero:</p>' +
+          '<div class="caja-wa" id="cajaBarbero">' + esc(msgBarbero) + '</div>' +
+          '<button class="btn-wa" id="btnWABarbero" data-tel="'+telBarbero+'" data-msg="'+encodeURIComponent(msgBarbero)+'">💬 Notificar al barbero</button>'
+        : '');
+    document.getElementById('modalFondo').classList.add('visible');
+    return;
+  }
+
+  if (tipo === 'aceptacion') {
+    titulo = '✅ Cita confirmada';
+    msg =
+      '✂️ *' + negocio + '*\n\n' +
+      '¡Hola ' + nombre + '! Tu cita está CONFIRMADA ✅\n\n' +
+      '💈 ' + servicio + (precio ? ' | 💰 ' + precio : '') + '\n' +
+      '📅 ' + fmtFecha(fec) + ' ⏰ ' + hora + '\n\n' +
+      '⚠️ Para cancelar, avísanos con 2 horas de anticipación.\n\n' +
+      '¡Te esperamos! 💈';
+
+  } else if (tipo === 'recordatorio') {
+    titulo = '⏰ Recordatorio';
+    msg =
+      '✂️ *' + negocio + '*\n\n' +
+      '¡Hola ' + nombre + '! Recordatorio de tu cita 👇\n\n' +
+      '💈 ' + servicio + '\n' +
+      '📅 ' + fmtFecha(fec) + ' ⏰ ' + hora + '\n\n' +
+      '¿Confirmas tu asistencia?\n✅ SÍ — todo bien\n❌ NO — necesito cancelar';
+
+  } else if (tipo === 'cancelacion') {
+    titulo = '❌ Cita cancelada';
+    msg =
+      '✂️ *' + negocio + '*\n\n' +
+      'Hola ' + nombre + ', tu cita fue cancelada ❌\n\n' +
+      '📅 ' + fmtFecha(fec) + ' ⏰ ' + hora + '\n' +
+      '💈 ' + servicio + '\n\n' +
+      'Para reagendar:\n🔗 ' + link;
+  }
+
+  msgModal = msg; telModal = c.telefono || '';
+  document.getElementById('modalTitulo').textContent = titulo;
+  document.getElementById('modalContenido').innerHTML =
+    '<div class="caja-wa">' + esc(msg) + '</div>' +
+    '<button class="btn-copiar" id="btnCopMsgCliente">📋 Copiar mensaje</button>' +
+    (c.telefono ? '<button class="btn-wa" id="btnWACliente">💬 Enviar por WhatsApp</button>' : '');
+  document.getElementById('modalFondo').classList.add('visible');
+}
+
+// ── MODAL EVENTOS ─────────────────────────────────────────
+document.getElementById('btnCerrarModal').addEventListener('click', function() {
+  document.getElementById('modalFondo').classList.remove('visible');
+});
+document.getElementById('modalFondo').addEventListener('click', function(e) {
+  if (e.target === this) this.classList.remove('visible');
+});
+
+document.getElementById('modalContenido').addEventListener('click', function(e) {
+  if (e.target.id === 'btnCopMsgCliente') {
+    copiar(msgModal);
+  }
+  if (e.target.id === 'btnWACliente') {
+    var num = telModal.replace(/\D/g,'');
+    if (!num.startsWith('57')) num = '57' + num;
+    window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(msgModal), '_blank');
+  }
+  if (e.target.id === 'btnWABarbero') {
+    var num = (e.target.getAttribute('data-tel')||'').replace(/\D/g,'');
+    var msg = decodeURIComponent(e.target.getAttribute('data-msg') || '');
+    if (!num.startsWith('57')) num = '57' + num;
+    window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(msg), '_blank');
+  }
+});
+
+// ── UTILS ─────────────────────────────────────────────────
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+function fmtFecha(f) {
+  if (!f) return '—';
+  try {
+    var p = f.split('-');
+    var ms = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+    return p[2] + ' ' + ms[parseInt(p[1])-1] + ' ' + p[0];
+  } catch(e) { return f; }
+}
+function copiar(texto) {
+  navigator.clipboard.writeText(texto).then(function() {
+    toast('📋 ¡Copiado!');
+  }).catch(function() {
+    var ta = document.createElement('textarea');
+    ta.value = texto; ta.style.position='fixed'; ta.style.opacity='0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy');
+    document.body.removeChild(ta); toast('📋 ¡Copiado!');
+  });
+}
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('visible');
+  setTimeout(function() { t.classList.remove('visible'); }, 2800);
+}
+</script>
+</body>
+</html>
